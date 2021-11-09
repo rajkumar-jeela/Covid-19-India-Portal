@@ -17,8 +17,8 @@ const initializeDbAndServer = async () => {
       filename: databasePath,
       driver: sqlite3.Database,
     });
-    app.listen(3000, () =>
-      console.log("Server Running at http://localhost:3000/")
+    app.listen(4000, () =>
+      console.log("Server Running at http://localhost:4000/")
     );
   } catch (error) {
     console.log(`Db Error: ${error.message}`);
@@ -54,7 +54,7 @@ app.post("/login/", async (request, response) => {
   const selectUserQuery = `SELECT * FROM user WHERE username = '${username}';`;
   const databaseUser = await database.get(selectUserQuery);
   if (databaseUser === undefined) {
-    response.send(400);
+    response.status(400);
     response.send("Invalid user");
   } else {
     const isPasswordMatched = await bcrypt.compare(
@@ -62,7 +62,9 @@ app.post("/login/", async (request, response) => {
       databaseUser.password
     );
     if (isPasswordMatched === true) {
-      const payload = { username: username };
+      const payload = {
+        username: username,
+      };
       const jwtToken = jwt.sign(payload, "MY_SECRET_TOKEN");
       response.send({ jwtToken });
     } else {
@@ -97,12 +99,15 @@ function authenticateToken(request, response, next) {
 //Returns a list of all states in the state table
 app.get("/states/", authenticateToken, async (request, response) => {
   const getStatesQuery = `
-    SELECT * FROM state;`;
+    SELECT
+      *
+    FROM
+      state;`;
   const statesArray = await database.all(getStatesQuery);
   response.send(
-    statesArray.map((eachState) => {
-      return convertStateDbObjectToResponseObject(eachState);
-    })
+    statesArray.map((eachState) =>
+      convertStateDbObjectToResponseObject(eachState)
+    )
   );
 });
 
@@ -110,8 +115,12 @@ app.get("/states/", authenticateToken, async (request, response) => {
 app.get("/states/:stateId/", authenticateToken, async (request, response) => {
   const { stateId } = request.params;
   const getStateQuery = `
-    SELECT * FROM state WHERE state_id = ${stateId};
-    `;
+    SELECT 
+      *
+    FROM 
+      state 
+    WHERE 
+      state_id = ${stateId};`;
   const state = await database.get(getStateQuery);
   response.send(convertStateDbObjectToResponseObject(state));
 });
@@ -158,6 +167,7 @@ app.put(
   "/districts/:districtId/",
   authenticateToken,
   async (request, response) => {
+    const { districtId } = request.params;
     const {
       districtName,
       stateId,
@@ -174,3 +184,31 @@ app.put(
     response.send("District Details Updated");
   }
 );
+
+//Returns the statistics of total cases, cured, active, deaths of a specific state based on state ID
+app.get(
+  "/states/:stateId/stats/",
+  authenticateToken,
+  async (request, response) => {
+    const { stateId } = request.params;
+    const getStateStatsQuery = `
+    SELECT
+      SUM(cases),
+      SUM(cured),
+      SUM(active),
+      SUM(deaths)
+    FROM
+      district
+    WHERE
+      state_id=${stateId};`;
+    const stats = await database.get(getStateStatsQuery);
+    response.send({
+      totalCases: stats["SUM(cases)"],
+      totalCured: stats["SUM(cured)"],
+      totalActive: stats["SUM(active)"],
+      totalDeaths: stats["SUM(deaths)"],
+    });
+  }
+);
+
+module.exports = app;
